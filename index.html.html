@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ecosystem Explorer 3D | IPAS Kelas V</title>
+<style>
+*{box-sizing:border-box}body{margin:0;overflow:hidden;font-family:Arial,sans-serif;background:#102746;color:#fff}#world{position:fixed;inset:0}canvas{display:block}
+#hud{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;gap:10px;z-index:3;pointer-events:none;flex-wrap:wrap}.pill{background:#10233bdc;border:1px solid #ffffff45;border-radius:15px;padding:9px 14px;font-weight:800;box-shadow:0 5px 20px #0002}
+#camBox{position:fixed;right:12px;bottom:12px;width:170px;height:125px;border:2px solid #fff8;border-radius:14px;overflow:hidden;background:#10233b;z-index:3}video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}#camLabel{position:absolute;bottom:4px;left:6px;font-size:11px;background:#0008;padding:3px 6px;border-radius:5px}
+#guide{position:fixed;left:12px;bottom:12px;max-width:min(450px,65vw);background:#10233bdc;border-radius:14px;padding:10px 13px;z-index:3;font-size:13px;line-height:1.45}
+#screen{position:fixed;inset:0;background:linear-gradient(135deg,#10233beF,#164d71eF);display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}.card{width:min(780px,96vw);max-height:92vh;overflow:auto;background:linear-gradient(150deg,#184879,#17345a);border:2px solid #b9f4ff;border-radius:25px;padding:clamp(18px,4vw,36px);text-align:center;box-shadow:0 20px 60px #0005}.card h1{font-size:clamp(30px,6vw,54px);color:#ffe66d;margin:0 0 10px;text-shadow:0 3px #956214}.card p{line-height:1.5;font-size:clamp(15px,2vw,19px)}.btn{border:0;border-radius:13px;background:#ffdf62;color:#14355b;font-size:17px;font-weight:900;padding:13px 18px;margin:5px;cursor:pointer;box-shadow:0 5px #ad7824}.btn.alt{background:#b6f4ff}.hidden{display:none!important}#feedback{font-weight:bold;color:#a6ffce;min-height:25px}.options{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}.option{background:#e8f7ff;color:#17355a;border-radius:16px;padding:14px 17px;font-weight:800;min-width:150px;border:3px solid #8bd9ff}
+@media(max-width:600px){#camBox{width:125px;height:95px}#guide{max-width:53vw;font-size:11px}}
+</style>
+</head>
+<body>
+<div id="world"></div>
+<div id="hud"><div class="pill" id="score">⭐ Bintang: 0</div><div class="pill" id="level">🌿 Level 1: Sawah</div><div class="pill" id="progress">🧭 0 / 240 m</div><div class="pill" id="camstatus">📷 Kamera belum aktif</div></div>
+<div id="guide">👋 Gerakkan telunjuk ke kiri/kanan untuk pindah jalur. Angkat tangan untuk melompat. Gerakkan tangan ke bawah untuk merunduk. Saat kuis, pilih jalur jawaban dengan gestur kiri/kanan.</div>
+<div id="camBox"><video id="video" autoplay playsinline></video><div id="camLabel">Preview webcam</div></div>
+<div id="screen"><div class="card" id="startcard">
+<h1>🌎 ECOSYSTEM EXPLORER</h1><h2>Petualangan 3D – IPAS Kelas V</h2>
+<p>Jadilah Penjelajah Ekosistem! Jelajahi sawah, hutan, kolam, dan laut. Kumpulkan bintang pengetahuan, hindari rintangan, dan selesaikan misi tentang ekosistem.</p>
+<p><b>Kontrol gestur:</b><br>⬅️ Gerakkan tangan ke kiri untuk jalur kiri<br>➡️ Gerakkan tangan ke kanan untuk jalur kanan<br>⬆️ Angkat tangan untuk melompat<br>⬇️ Turunkan tangan untuk merunduk</p>
+<p>Di checkpoint, pilih jawaban dengan mengarahkan tangan ke jalur kiri, tengah, atau kanan, lalu tahan sebentar.</p><div id="feedback"></div>
+<button class="btn" id="startbtn">AKTIFKAN KAMERA & MULAI</button><button class="btn alt" id="howbtn">PETUNJUK</button>
+</div><div class="card hidden" id="quizcard"><h1>🧠 MISI PENJELajah</h1><h2 id="qtitle">Pertanyaan</h2><p id="qtext"></p><div class="options" id="options"></div><p id="qhint">Pilih jalur jawaban dengan gerakan tangan.</p></div><div class="card hidden" id="endcard"><h1 id="endtitle">🌟 Petualangan selesai!</h1><p id="endtext"></p><button class="btn" id="again">MAIN LAGI</button></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const $=s=>document.querySelector(s),host=$('#world'),video=$('#video'),screen=$('#screen'),startcard=$('#startcard'),quizcard=$('#quizcard'),endcard=$('#endcard');
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x9be5ff);scene.fog=new THREE.Fog(0x9be5ff,38,105);
+const camera=new THREE.PerspectiveCamera(64,innerWidth/innerHeight,.1,160);camera.position.set(0,5.8,11);camera.lookAt(0,1,-9);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x567845,2.3));const sun=new THREE.DirectionalLight(0xffffff,2.3);sun.position.set(-8,14,10);sun.castShadow=true;scene.add(sun);
+const material=c=>new THREE.MeshStandardMaterial({color:c,roughness:.8});
+const lanes=[-2.4,0,2.4];let scenery=[],entities=[],score=0,dist=0,lane=1,playing=false,quizMode=false,quizIndex=0,gestureLock=0,handDetected=false,handX=.5,handY=.5,lastY=.5,jump=false,jumpT=0,duck=false,spawnT=0,answered=false;
+const zones=[{name:'Sawah',start:0,end:60,bg:0x9be5ff,ground:0x69b95c},{name:'Hutan',start:60,end:120,bg:0x8bd7ff,ground:0x328a4a},{name:'Kolam',start:120,end:180,bg:0x8be5ef,ground:0x42a8a5},{name:'Laut',start:180,end:240,bg:0x4bb6e8,ground:0x2784b7}];
+const questions=[
+ {at:55,zone:'Sawah',q:'Dalam ekosistem sawah, manakah yang termasuk komponen abiotik?',opts:['Padi','Air','Belalang'],correct:1,ex:'Air adalah komponen abiotik. Padi dan belalang merupakan makhluk hidup (biotik).'},
+ {at:115,zone:'Hutan',q:'Organisme yang dapat membuat makanan sendiri melalui fotosintesis disebut ...',opts:['Konsumen','Pengurai','Produsen'],correct:2,ex:'Tumbuhan merupakan produsen karena dapat membuat makanan sendiri.'},
+ {at:175,zone:'Kolam',q:'Urutan rantai makanan yang tepat adalah ...',opts:['Alga → ikan kecil → ikan besar','Ikan besar → alga → ikan kecil','Ikan kecil → ikan besar → alga'],correct:0,ex:'Alga dapat menjadi produsen, dimakan ikan kecil, kemudian ikan kecil dimakan ikan besar.'},
+ {at:235,zone:'Laut',q:'Jika jumlah ikan kecil menurun drastis, pemangsa ikan kecil dapat ...',opts:['Selalu bertambah','Kesulitan memperoleh makanan','Tidak terpengaruh'],correct:1,ex:'Penurunan jumlah mangsa dapat memengaruhi pemangsa dan keseimbangan ekosistem.'}
+];
+function makePlayer(){let g=new THREE.Group();const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.42,.75,4,10),material(0x2778ed));torso.position.y=1.2;g.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.37,16,12),material(0xffc58b));head.position.y=2.1;g.add(head);const hair=new THREE.Mesh(new THREE.SphereGeometry(.4,12,8),material(0x53331d));hair.position.y=2.34;g.add(hair);for(let x of [-.13,.13]){let eye=new THREE.Mesh(new THREE.SphereGeometry(.05,8,8),material(0x172c42));eye.position.set(x,2.12,.32);g.add(eye)}for(let x of [-.22,.22]){let leg=new THREE.Mesh(new THREE.BoxGeometry(.22,.55,.22),material(0x224a95));leg.position.set(x,.38,0);g.add(leg);let shoe=new THREE.Mesh(new THREE.BoxGeometry(.32,.17,.36),material(0xffdf56));shoe.position.set(x,.12,.08);g.add(shoe)}return g}
+const player=makePlayer();player.position.z=3;scene.add(player);
+function buildZone(z,zone){const floor=new THREE.Mesh(new THREE.PlaneGeometry(13,65),material(zone.ground));floor.rotation.x=-Math.PI/2;floor.position.set(0,-.04,z-30);scene.add(floor);const track=new THREE.Mesh(new THREE.PlaneGeometry(7.6,65),material(0xb78c61));track.rotation.x=-Math.PI/2;track.position.set(0,.01,z-30);scene.add(track);
+ for(let i=0;i<2;i++){let stripe=new THREE.Mesh(new THREE.PlaneGeometry(.06,65),material(0xffe8b1));stripe.rotation.x=-Math.PI/2;stripe.position.set((lanes[i]+lanes[i+1])/2,.03,z-30);scene.add(stripe)}
+ // region-specific stylized side scenery
+ for(let zz=z+4;zz>z-64;zz-=6)for(let side of [-1,1]){
+ let trunk=new THREE.Mesh(new THREE.CylinderGeometry(.2,.3,1.6,7),material(zone.name==='Laut'?0x88735c:0x87552e));trunk.position.set(side*6.3,.8,zz);scene.add(trunk);
+ let crown=new THREE.Mesh(new THREE.SphereGeometry(1.25,12,9),material(zone.name==='Laut'?0x41b5d5:zone.name==='Kolam'?0x44b69b:zone.name==='Sawah'?0x4fb84b:0x2b8d48));crown.position.set(side*6.3,2.2,zz);scene.add(crown);
+ }}
+zones.forEach(z=>buildZone(z.start,z));
+function starObj(){let g=new THREE.Group();g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(.48,1),material(0xffe34b)));let ring=new THREE.Mesh(new THREE.TorusGeometry(.58,.07,8,20),material(0xffa52f));ring.rotation.x=Math.PI/2;g.add(ring);g.userData.kind='star';return g}
+function hazard(){let g=new THREE.Group();let rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.65,0),material(0xe45b45));g.add(rock);g.userData.kind='hazard';return g}
+function spawn(){let ln=Math.floor(Math.random()*3),o=Math.random()<.72?starObj():hazard();o.position.set(lanes[ln],o.userData.kind==='star'?1.4:.65,-42);o.userData.lane=ln;scene.add(o);entities.push(o)}
+function setZone(){let z=zones.find(z=>dist>=z.start&&dist<z.end)||zones[3];scene.background.setHex(z.bg);scene.fog.color.setHex(z.bg);$('#level').textContent=`🌿 Level ${zones.indexOf(z)+1}: ${z.name}`}
+function showQuiz(q){playing=false;quizMode=true;answered=false;screen.classList.remove('hidden');startcard.classList.add('hidden');endcard.classList.add('hidden');quizcard.classList.remove('hidden');$('#qtitle').textContent=`Checkpoint ${quizIndex+1} – ${q.zone}`;$('#qtext').textContent=q.q;$('#options').innerHTML=q.opts.map((o,i)=>`<div class="option">${['⬅️','⬆️','➡️'][i]} ${o}</div>`).join('');$('#qhint').textContent='Pilih jawaban: gerakkan tangan ke kiri (pilihan 1), tengah (pilihan 2), atau kanan (pilihan 3).';}
+function answerQuiz(index){if(answered)return;answered=true;let q=questions[quizIndex];let correct=index===q.correct;$('#qhint').textContent=correct?'🎉 Benar! '+q.ex:'Belum tepat. '+q.ex;$('#qhint').style.color=correct?'#a5ffca':'#ffe29a';if(correct)score+=5;$('#score').textContent=`⭐ Bintang: ${score}`;setTimeout(()=>{quizMode=false;quizIndex++;screen.classList.add('hidden');quizcard.classList.add('hidden');if(quizIndex>=questions.length){finish(true)}else{playing=true}},2400)}
+function finish(win){playing=false;quizMode=false;screen.classList.remove('hidden');startcard.classList.add('hidden');quizcard.classList.add('hidden');endcard.classList.remove('hidden');$('#endtitle').textContent=win?'🏆 Penjelajah Ekosistem Hebat!':'🌱 Terus berlatih!';$('#endtext').innerHTML=`Petualangan selesai!<br>⭐ Bintang terkumpul: <b>${score}</b><br>🧭 Jarak: ${Math.floor(dist)} meter<br><br>Ingat: komponen biotik dan abiotik saling berinteraksi. Produsen, konsumen, dan pengurai membantu menjaga keseimbangan ekosistem.`}
+function reset(){score=0;dist=0;lane=1;quizIndex=0;playing=true;quizMode=false;duck=false;jump=false;player.position.set(0,0,3);entities.forEach(o=>scene.remove(o));entities=[];spawnT=0;gestureLock=0;$('#score').textContent='⭐ Bintang: 0';$('#progress').textContent='🧭 0 / 240 m';screen.classList.add('hidden');startcard.classList.remove('hidden');quizcard.classList.add('hidden');endcard.classList.add('hidden');}
+function gestures(){if(!handDetected||gestureLock>0)return;let x=1-handX,y=handY;
+ if(x<.28&&lane>0){lane--;gestureLock=.32}
+ else if(x>.72&&lane<2){lane++;gestureLock=.32}
+ // vertical control use landmark wrist/index relative: hand position in camera frame; top of frame jump, bottom crouch
+ if(y<.24&&!jump&&!duck){jump=true;jumpT=0;gestureLock=.45}
+ else if(y>.78&&!jump&&!duck){duck=true;gestureLock=.45}
+ else if(y>.48&&y<.62){duck=false}
+}
+function results(r){handDetected=!!(r.multiHandLandmarks&&r.multiHandLandmarks.length);if(handDetected){handX=r.multiHandLandmarks[0][8].x;handY=r.multiHandLandmarks[0][8].y;$('#camstatus').textContent='🟢 Tangan terdeteksi'}else $('#camstatus').textContent='📷 Tunjukkan tangan'}
+const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.65,minTrackingConfidence:.55});hands.onResults(results);
+let cam=null;async function startCam(){try{cam=new Camera(video,{onFrame:async()=>hands.send({image:video}),width:640,height:480});await cam.start();$('#feedback').textContent='Kamera aktif!';reset()}catch(e){$('#feedback').textContent='Kamera tidak dapat diakses. Jalankan melalui localhost/HTTPS dan izinkan kamera.'}}
+$('#startbtn').onclick=startCam;$('#again').onclick=()=>reset();$('#howbtn').onclick=()=>{$('#feedback').textContent='Gerakkan tangan secara perlahan. Posisi kiri/kanan mengubah jalur; posisi atas untuk lompat dan bawah untuk merunduk.'};
+const clock=new THREE.Clock();
+function animate(){requestAnimationFrame(animate);let dt=Math.min(clock.getDelta(),.04);if(playing){dist+=dt*9;$('#progress').textContent=`🧭 ${Math.floor(dist)} / 240 m`;setZone();gestureLock=Math.max(0,gestureLock-dt);gestures();player.position.x+=(lanes[lane]-player.position.x)*Math.min(1,dt*7);if(jump){jumpT+=dt;player.position.y=Math.sin(Math.min(jumpT/.8,1)*Math.PI)*2.0;if(jumpT>=.8){jump=false;player.position.y=0}}player.scale.y=duck?.65:1;if(duck)player.position.y=-.15;else if(!jump)player.position.y=0;spawnT+=dt;if(spawnT>1.15){spawn();spawnT=0}
+ for(let i=entities.length-1;i>=0;i--){let o=entities[i];o.position.z+=dt*10.5;o.rotation.y+=dt*1.5;if(o.userData.kind==='star')o.position.y=1.4+Math.sin(clock.elapsedTime*3+i)*.2;if(Math.abs(o.position.z-player.position.z)<1.1&&Math.abs(o.position.x-player.position.x)<.9){if(o.userData.kind==='star'){score++;$('#score').textContent=`⭐ Bintang: ${score}`;scene.remove(o);entities.splice(i,1);continue}else if(!jump&&!duck){finish(false);break}else{scene.remove(o);entities.splice(i,1);continue}}if(o.position.z>7){scene.remove(o);entities.splice(i,1)}}
+ if(quizIndex<questions.length&&dist>=questions[quizIndex].at){showQuiz(questions[quizIndex]);}
+ if(dist>=240&&quizIndex>=questions.length)finish(true);
+ }else if(!jump){player.position.y=Math.sin(clock.elapsedTime*2)*.04}
+ if(quizMode&&handDetected&&!answered&&gestureLock<=0){let x=1-handX;let pick=x<.33?0:x>.67?2:1;answerQuiz(pick);gestureLock=.9}
+ renderer.render(scene,camera)}
+animate();addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body></html>
